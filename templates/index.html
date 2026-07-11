@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Gestión Hídrica Inteligente</title>
+<style>
+/* ════════════════════════════════════════════════════
+   RESET & BASE
+════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #050d1a;
+  --surface:  #0b1829;
+  --surface2: #0f2035;
+  --border:   rgba(0,200,255,0.12);
+  --cyan:     #00c8ff;
+  --cyan-dim: rgba(0,200,255,0.18);
+  --teal:     #7ecec4;
+  --green:    #00e676;
+  --orange:   #ff9800;
+  --red:      #f44336;
+  --purple:   #9c6fff;
+  --white:    #ddf0f5;
+  --grey:     #4a6070;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --font-ui:   'Inter', 'Segoe UI', sans-serif;
+  --panel-w:  270px;
+  --top-h:    54px;
+  --status-h: 30px;
+}
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); color: var(--white); font-family: var(--font-ui); font-size: 13px; }
+
+/* ════════════════════════════════════════════════════
+   TOPBAR
+════════════════════════════════════════════════════ */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--top-h);
+  background: linear-gradient(90deg, #061525f5, #06201af5);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; z-index: 100; backdrop-filter: blur(12px);
+  gap: 12px;
+}
+.topbar-brand { display: flex; flex-direction: column; gap: 2px; }
+.topbar-brand h1 { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--cyan); letter-spacing: 1.5px; }
+.topbar-brand span { font-size: 10px; color: var(--teal); letter-spacing: 0.5px; }
+.topbar-nav { display: flex; gap: 6px; }
+.nav-btn {
+  padding: 5px 14px; border-radius: 3px; border: 1px solid var(--border);
+  background: transparent; color: var(--teal); font-size: 11px;
+  font-family: var(--font-mono); cursor: pointer; letter-spacing: 0.5px;
+  transition: all .2s;
+}
+.nav-btn:hover, .nav-btn.active { background: var(--cyan-dim); border-color: var(--cyan); color: var(--cyan); }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+#auto-badge {
+  display: none; align-items: center; gap: 6px;
+  background: rgba(156,111,255,.15); border: 1px solid rgba(156,111,255,.4);
+  border-radius: 20px; padding: 3px 12px; font-size: 10px; color: var(--purple);
+  animation: pulse 1.8s infinite; font-family: var(--font-mono);
+}
+#auto-badge.on { display: flex; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+#reloj { font-family: var(--font-mono); font-size: 11px; color: var(--teal); }
+
+/* ════════════════════════════════════════════════════
+   STATUS BAR
+════════════════════════════════════════════════════ */
+#statusbar {
+  position: fixed; top: var(--top-h); left: var(--panel-w);
+  right: var(--panel-w); height: var(--status-h);
+  background: #070f1c; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; z-index: 90;
+}
+.sb-seg {
+  flex: 1; height: 100%; display: flex; align-items: center;
+  justify-content: center; gap: 6px; font-size: 10px;
+  font-family: var(--font-mono); border-right: 1px solid var(--border);
+}
+.sb-seg:last-child { border-right: none; }
+.sb-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* ════════════════════════════════════════════════════
+   PANELS
+════════════════════════════════════════════════════ */
+#left-panel, #right-panel {
+  position: fixed; top: calc(var(--top-h) + var(--status-h)); bottom: 0;
+  width: var(--panel-w); background: var(--surface);
+  border-color: var(--border); overflow-y: auto; z-index: 80;
+}
+#left-panel  { left: 0;  border-right: 1px solid var(--border); }
+#right-panel { right: 0; border-left:  1px solid var(--border); }
+
+.panel-sec { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
+.panel-lbl {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 2px;
+  color: var(--cyan); text-transform: uppercase; margin-bottom: 10px;
+}
+
+/* Zone card */
+.zone-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 5px; padding: 9px 11px; margin-bottom: 8px;
+  cursor: pointer; transition: border-color .2s, background .2s;
+}
+.zone-card:hover { border-color: rgba(0,200,255,.35); background: #122536; }
+.zone-card.selected { border-color: var(--cyan); background: #0d2a40; }
+.zc-head { display: flex; justify-content: space-between; align-items: baseline; }
+.zc-name { font-size: 12px; font-weight: 600; color: var(--white); }
+.zc-estado { font-size: 10px; font-family: var(--font-mono); }
+.zc-crop { font-size: 10px; color: var(--teal); margin: 3px 0; }
+.zc-metrics { display: flex; gap: 10px; font-size: 10px; font-family: var(--font-mono); }
+.bar-wrap { margin-top: 6px; height: 3px; background: #0a1929; border-radius: 2px; }
+.bar-fill { height: 3px; border-radius: 2px; transition: width .6s; }
+
+/* Slider */
+.sl-group { margin-bottom: 12px; }
+.sl-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px; }
+.sl-val { font-family: var(--font-mono); color: var(--cyan); font-weight: 700; }
+input[type=range] {
+  width: 100%; height: 3px; appearance: none; background: #1a3a5c;
+  border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  appearance: none; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--cyan); border: 2px solid var(--surface);
+}
+
+/* Action buttons */
+.act-btn {
+  width: 100%; padding: 8px 10px; border: none; border-radius: 4px;
+  font-size: 11px; font-family: var(--font-mono); cursor: pointer;
+  font-weight: 600; letter-spacing: .3px; margin-bottom: 6px;
+  transition: filter .2s, transform .1s;
+}
+.act-btn:hover { filter: brightness(1.15); }
+.act-btn:active { transform: scale(.98); }
+.btn-green  { background: #005c38; color: #b9f6ca; }
+.btn-red    { background: #7b1010; color: #ffd6d6; }
+.btn-blue   { background: #0d3a6e; color: #b3d9ff; }
+.btn-orange { background: #6b3200; color: #ffe0b2; }
+.btn-purple { background: #2d1466; color: #e1d5ff; }
+.btn-off    { background: #1a2a3a; color: var(--grey); }
+
+/* Sys metrics */
+.metric-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+.metric-lbl { font-size: 10px; color: var(--grey); }
+.metric-val { font-size: 11px; font-family: var(--font-mono); font-weight: 700; }
+
+/* ════════════════════════════════════════════════════
+   3D CANVAS
+════════════════════════════════════════════════════ */
+#canvas-wrap {
+  position: fixed;
+  top: calc(var(--top-h) + var(--status-h));
+  left: var(--panel-w); right: var(--panel-w); bottom: 0;
+}
+#canvas-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
+
+/* ════════════════════════════════════════════════════
+   ALERT BANNER
+════════════════════════════════════════════════════ */
+#alert-banner {
+  position: fixed; top: calc(var(--top-h) + var(--status-h) + 10px);
+  left: 50%; transform: translateX(-50%);
+  z-index: 500; display: flex; flex-direction: column; gap: 6px;
+  width: 460px; pointer-events: none;
+}
+.alert-card {
+  border-radius: 6px; padding: 11px 14px;
+  display: flex; align-items: flex-start; gap: 12px;
+  backdrop-filter: blur(16px); pointer-events: all;
+  animation: slideIn .3s cubic-bezier(.22,1,.36,1);
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  border: 1px solid transparent;
+}
+@keyframes slideIn { from{opacity:0;transform:translateY(-14px) scale(.96)} to{opacity:1;transform:none} }
+.alert-critical { background: #1a0606ee; border-color: #f4433677; }
+.alert-warning  { background: #1a0e00ee; border-color: #ff980077; }
+.alert-ok       { background: #001a0dee; border-color: #00e67677; }
+.alert-info     { background: #001a28ee; border-color: #00c8ff77; }
+.alert-auto     { background: #0e0028ee; border-color: #9c6fff77; }
+.alert-icon { font-size: 20px; flex-shrink: 0; }
+.alert-body { flex: 1; }
+.alert-title { font-size: 12px; font-weight: 700; font-family: var(--font-mono); }
+.alert-msg   { font-size: 10px; color: var(--grey); margin-top: 3px; line-height: 1.5; }
+.alert-prog  { height: 2px; border-radius: 1px; margin-top: 7px; }
+.alert-close { background: none; border: none; color: var(--grey); cursor: pointer; font-size: 14px; padding: 0; flex-shrink:0; align-self:flex-start; }
+.alert-close:hover { color: var(--white); }
+
+/* ════════════════════════════════════════════════════
+   RIGHT PANEL — zone detail
+════════════════════════════════════════════════════ */
+.detail-card {
+  background: var(--surface2); border-radius: 5px;
+  padding: 11px; margin-bottom: 10px;
+}
+.dc-title { font-size: 9px; letter-spacing: 1.5px; color: var(--teal); text-transform: uppercase; margin-bottom: 8px; }
+.gauge-row { display: flex; justify-content: space-around; }
+.gauge { text-align: center; }
+.gauge-val { font-size: 22px; font-weight: 800; font-family: var(--font-mono); }
+.gauge-lbl { font-size: 9px; color: var(--grey); margin-top: 2px; }
+.pred-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.pred-h { font-size: 9px; color: var(--grey); width: 32px; font-family: var(--font-mono); }
+.pred-track { flex: 1; height: 5px; background: #0a1929; border-radius: 3px; overflow: hidden; }
+.pred-bar { height: 5px; border-radius: 3px; transition: width .6s; }
+.pred-pct { font-size: 9px; font-family: var(--font-mono); color: var(--white); width: 28px; text-align: right; }
+.tl-item { padding: 5px 0; border-bottom: 1px solid var(--border); }
+.tl-time { font-size: 9px; color: var(--grey); font-family: var(--font-mono); }
+.tl-text { font-size: 10px; color: var(--teal); margin-top: 2px; }
+
+/* ════════════════════════════════════════════════════
+   REPORTS OVERLAY
+════════════════════════════════════════════════════ */
+#reports-panel {
+  position: fixed; top: var(--top-h); left: var(--panel-w); right: var(--panel-w); bottom: 0;
+  background: rgba(5,13,26,.96); z-index: 300; overflow-y: auto;
+  display: none; backdrop-filter: blur(10px);
+}
+#reports-panel.open { display: block; }
+.rep-inner { max-width: 960px; margin: 0 auto; padding: 28px 20px 40px; }
+.rep-header { text-align: center; margin-bottom: 28px; }
+.rep-header h2 { font-family: var(--font-mono); font-size: 18px; color: var(--cyan); }
+.rep-header p { font-size: 11px; color: var(--teal); margin-top: 6px; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; margin-bottom: 28px; }
+.kpi-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 16px; text-align: center; transition: transform .2s;
+}
+.kpi-card:hover { transform: translateY(-2px); border-color: rgba(0,200,255,.3); }
+.kpi-icon { font-size: 22px; margin-bottom: 6px; }
+.kpi-val { font-family: var(--font-mono); font-size: 26px; font-weight: 800; color: var(--cyan); }
+.kpi-lbl { font-size: 9px; color: var(--teal); margin-top: 4px; letter-spacing: .5px; }
+.kpi-target { font-size: 8px; color: var(--grey); margin-top: 5px; }
+
+.rep-section { margin-bottom: 28px; }
+.rep-section h3 { font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px; color: var(--cyan); text-transform: uppercase; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+
+/* Tabla */
+.data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.data-table th { font-family: var(--font-mono); font-size: 9px; color: var(--orange); padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.data-table td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,.04); color: var(--white); }
+.data-table tr:hover td { background: var(--surface2); }
+
+/* Mini bar en tabla */
+.tbar-wrap { display: flex; align-items: center; gap: 8px; }
+.tbar { flex: 1; height: 4px; background: #0a1929; border-radius: 2px; overflow: hidden; }
+.tbar-fill { height: 4px; border-radius: 2px; }
+
+/* Anomalías */
+.anom-row { display: flex; gap: 10px; padding: 6px 8px; border-radius: 4px; background: rgba(244,67,54,.07); border: 1px solid rgba(244,67,54,.15); margin-bottom: 5px; font-size: 10px; font-family: var(--font-mono); }
+.anom-time { color: var(--grey); width: 90px; flex-shrink:0; }
+.anom-val  { color: var(--red); }
+.anom-z    { color: var(--orange); }
+
+/* Arch boxes */
+.arch-row { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.arch-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 8px 12px; text-align: center; font-size: 10px; color: var(--teal); }
+.arch-box strong { display: block; color: var(--cyan); font-size: 12px; margin-bottom: 2px; }
+.arch-arr { color: var(--grey); font-size: 18px; }
+
+/* ════════════════════════════════════════════════════
+   TOOLTIP
+════════════════════════════════════════════════════ */
+#tooltip {
+  position: fixed; background: rgba(10,25,45,.95); border: 1px solid var(--border);
+  border-radius: 5px; padding: 8px 12px; font-size: 11px; color: var(--white);
+  pointer-events: none; z-index: 600; display: none;
+  backdrop-filter: blur(10px); font-family: var(--font-mono);
+}
+
+/* ════════════════════════════════════════════════════
+   SCROLLBAR
+════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(0,200,255,.2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<div id="topbar">
+  <div class="topbar-brand">
+    <h1>● SISTEMA DE GESTIÓN HÍDRICA INTELIGENTE</h1>
+    <span>Monitoreo en Tiempo Real · IoT + Machine Learning · ESP32 — Flask/Python</span>
+  </div>
+  <div class="topbar-nav">
+    <button class="nav-btn active" id="btn-3d"      onclick="setVista('3d')">🌐 Vista 3D</button>
+    <button class="nav-btn"        id="btn-reports" onclick="setVista('reports')">📊 Reportes</button>
+  </div>
+  <div class="topbar-right">
+    <div id="auto-badge">🤖 RIEGO AUTOMÁTICO ACTIVO</div>
+    <div id="reloj"></div>
+  </div>
+</div>
+
+<!-- ═══ STATUS BAR ═══ -->
+<div id="statusbar">
+  <div class="sb-seg">
+    <div class="sb-dot" id="sb-dot-global" style="background:var(--green)"></div>
+    <span style="color:var(--grey)">Estado:</span>
+    <span id="sb-estado" style="color:var(--green);font-weight:700">NORMAL</span>
+  </div>
+  <div class="sb-seg">
+    <div class="sb-dot" style="background:var(--cyan)"></div>
+    <span style="color:var(--grey)">Hum. Prom:</span>
+    <span id="sb-hum" style="color:var(--cyan);font-weight:700">–</span>
+  </div>
+  <div class="sb-seg">
+    <div class="sb-dot" style="background:var(--purple)"></div>
+    <span style="color:var(--grey)">Modo:</span>
+    <span id="sb-modo" style="color:var(--purple);font-weight:700">MANUAL</span>
+  </div>
+  <div class="sb-seg">
+    <div class="sb-dot" id="sb-dot-riego" style="background:var(--grey)"></div>
+    <span style="color:var(--grey)">Riego:</span>
+    <span id="sb-riego" style="color:var(--grey);font-weight:700">DETENIDO</span>
+  </div>
+  <div class="sb-seg">
+    <div class="sb-dot" style="background:var(--orange)"></div>
+    <span style="color:var(--grey)">Alertas:</span>
+    <span id="sb-alerts" style="color:var(--orange);font-weight:700">0</span>
+  </div>
+</div>
+
+<!-- ═══ 3D CANVAS ═══ -->
+<div id="canvas-wrap"></div>
+
+<!-- ═══ LEFT PANEL ═══ -->
+<div id="left-panel">
+  <div class="panel-sec">
+    <div class="panel-lbl">Zonas de Cultivo</div>
+    <div id="zone-cards"></div>
+  </div>
+  <div class="panel-sec">
+    <div class="panel-lbl">Control de Riego</div>
+    <div class="sl-group">
+      <div class="sl-row"><span>Umbral de Humedad</span><span class="sl-val" id="v-umbral">45%</span></div>
+      <input type="range" min="20" max="80" value="45" oninput="document.getElementById('v-umbral').textContent=this.value+'%'">
+    </div>
+    <div class="sl-group">
+      <div class="sl-row"><span>Caudal de Riego</span><span class="sl-val" id="v-caudal">3.2 L/min</span></div>
+      <input type="range" min="10" max="80" value="32" oninput="document.getElementById('v-caudal').textContent=(this.value/10).toFixed(1)+' L/min'">
+    </div>
+    <div class="sl-group">
+      <div class="sl-row"><span>Intervalo Predicción</span><span class="sl-val" id="v-pred">24h</span></div>
+      <input type="range" min="6" max="48" step="6" value="24" oninput="document.getElementById('v-pred').textContent=this.value+'h'">
+    </div>
+    <div class="sl-group">
+      <div class="sl-row"><span>Precisión ML Mínima</span><span class="sl-val" id="v-ml">75%</span></div>
+      <input type="range" min="60" max="95" value="75" oninput="document.getElementById('v-ml').textContent=this.value+'%'">
+    </div>
+  </div>
+  <div class="panel-sec">
+    <div class="panel-lbl">Acciones</div>
+    <button class="act-btn btn-green"  id="btn-riego"  onclick="accion('toggle_riego')">💧 Activar Riego Manual</button>
+    <button class="act-btn btn-blue"                   onclick="accion('prediccion_ml')">🤖 Ejecutar Predicción ML</button>
+    <button class="act-btn btn-orange"                 onclick="accion('estres_hidrico')">⚠️ Simular Estrés Hídrico</button>
+    <button class="act-btn btn-purple" id="btn-auto"   onclick="accion('toggle_auto')">🔄 Activar Modo Automático</button>
+  </div>
+  <div class="panel-sec">
+    <div class="panel-lbl">Sistema</div>
+    <div class="metric-row"><span class="metric-lbl">Nodos ESP32</span><span class="metric-val" style="color:var(--green)">4 / 4 ✓</span></div>
+    <div class="metric-row"><span class="metric-lbl">Backend Flask</span><span class="metric-val" style="color:var(--green)">Online</span></div>
+    <div class="metric-row"><span class="metric-lbl">SSE Stream</span><span class="metric-val" id="sse-status" style="color:var(--orange)">Conectando…</span></div>
+    <div class="metric-row"><span class="metric-lbl">Ciclos simulación</span><span class="metric-val" id="sync-count" style="color:var(--teal)">0</span></div>
+    <div class="metric-row"><span class="metric-lbl">Agua ahorrada</span><span class="metric-val" id="agua-ahorrada" style="color:var(--cyan)">0 L</span></div>
+  </div>
+</div>
+
+<!-- ═══ RIGHT PANEL ═══ -->
+<div id="right-panel">
+  <div class="panel-sec">
+    <div class="panel-lbl">Zona Seleccionada</div>
+    <div id="zone-detail">
+      <div style="text-align:center;color:var(--grey);font-size:11px;padding:20px 0;line-height:1.8">
+        Haz clic en una zona<br>del campo 3D para ver<br>sus detalles aquí
+      </div>
+    </div>
+  </div>
+  <div class="panel-sec">
+    <div class="panel-lbl">Predicción ML (48h)</div>
+    <div id="ml-pred"></div>
+  </div>
+  <div class="panel-sec">
+    <div class="panel-lbl">Registro de Eventos</div>
+    <div id="event-log"></div>
+  </div>
+</div>
+
+<!-- ═══ ALERT BANNER ═══ -->
+<div id="alert-banner"></div>
+
+<!-- ═══ TOOLTIP ═══ -->
+<div id="tooltip"></div>
+
+<!-- ═══ REPORTS PANEL ═══ -->
+<div id="reports-panel">
+  <div class="rep-inner">
+    <div class="rep-header">
+      <h2>📊 PANEL DE REPORTES DEL PROYECTO</h2>
+      <p>Sistema de Gestión Hídrica Inteligente · Backend Python/Flask · Análisis con Pandas + NumPy</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-icon">💧</div><div class="kpi-val">20%</div><div class="kpi-lbl">Reducción Consumo Agua</div><div class="kpi-target">Meta: ≥ 20% comprobado</div></div>
+      <div class="kpi-card"><div class="kpi-icon">🤖</div><div class="kpi-val" id="kpi-prec">–</div><div class="kpi-lbl">Precisión Modelo ML</div><div class="kpi-target">Meta: ≥ 75%</div></div>
+      <div class="kpi-card"><div class="kpi-icon">📡</div><div class="kpi-val">15 min</div><div class="kpi-lbl">Frecuencia de Muestreo</div><div class="kpi-target">Por 6 semanas</div></div>
+      <div class="kpi-card"><div class="kpi-icon">⏰</div><div class="kpi-val">48 h</div><div class="kpi-lbl">Horizonte Predictivo</div><div class="kpi-target">Anticipación de riego</div></div>
+      <div class="kpi-card"><div class="kpi-icon">⚡</div><div class="kpi-val">14 días</div><div class="kpi-lbl">Prueba Automatizada</div><div class="kpi-target">Entorno controlado</div></div>
+      <div class="kpi-card"><div class="kpi-icon">🌱</div><div class="kpi-val">4 Zonas</div><div class="kpi-lbl">Zonas Monitoreadas</div><div class="kpi-target">Maíz · Papa · Espárrago · Quinua</div></div>
+    </div>
+
+    <div class="rep-section">
+      <h3>Análisis Estadístico por Zona (Pandas)</h3>
+      <table class="data-table">
+        <thead><tr><th>Zona</th><th>Hum. Media</th><th>Desv. Std</th><th>Mín</th><th>Máx</th><th>Temp. Media</th><th>% Tiempo Crítico</th><th>Tendencia</th></tr></thead>
+        <tbody id="stats-tbody"><tr><td colspan="8" style="color:var(--grey);text-align:center;padding:16px">Cargando análisis…</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="rep-section" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div>
+        <h3>Anomalías Detectadas (Z-Score &gt; 2.0)</h3>
+        <div id="anom-container" style="color:var(--grey);font-size:11px">Cargando…</div>
+      </div>
+      <div>
+        <h3>Objetivos del Proyecto</h3>
+        <div id="obj-list">
+          <div class="anom-row" style="background:rgba(0,230,118,.07);border-color:rgba(0,230,118,.2)">
+            <span style="color:var(--green)">✅</span>
+            <span style="color:var(--teal)">Red de sensores IoT en tiempo real (4 zonas)</span>
+          </div>
+          <div class="anom-row" style="background:rgba(0,230,118,.07);border-color:rgba(0,230,118,.2)">
+            <span style="color:var(--green)">✅</span>
+            <span style="color:var(--teal)">Base de datos con registros cada 15 min</span>
+          </div>
+          <div class="anom-row" style="background:rgba(255,152,0,.07);border-color:rgba(255,152,0,.2)">
+            <span style="color:var(--orange)">🔄</span>
+            <span style="color:var(--teal)">Modelo ML con ≥75% precisión (en desarrollo)</span>
+          </div>
+          <div class="anom-row" style="background:rgba(255,152,0,.07);border-color:rgba(255,152,0,.2)">
+            <span style="color:var(--orange)">🔄</span>
+            <span style="color:var(--teal)">Electroválvulas automáticas (14 días prueba)</span>
+          </div>
+          <div class="anom-row" style="background:rgba(0,230,118,.07);border-color:rgba(0,230,118,.2)">
+            <span style="color:var(--green)">✅</span>
+            <span style="color:var(--teal)">Reducción ≥20% consumo hídrico: Validado</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rep-section">
+      <h3>Arquitectura Tecnológica</h3>
+      <div class="arch-row">
+        <div class="arch-box"><strong>Sensores IoT</strong>Humedad · Temp</div>
+        <div class="arch-arr">→</div>
+        <div class="arch-box"><strong>ESP32</strong>Microcontrolador</div>
+        <div class="arch-arr">→</div>
+        <div class="arch-box"><strong>WiFi/LoRa</strong>Transmisión</div>
+        <div class="arch-arr">→</div>
+        <div class="arch-box"><strong>Firebase</strong>Cloud DB</div>
+      </div>
+      <div class="arch-row" style="margin-top:8px">
+        <div class="arch-box"><strong>Flask/Python</strong>Backend API</div>
+        <div class="arch-arr">→</div>
+        <div class="arch-box"><strong>Pandas/NumPy</strong>Análisis ML</div>
+        <div class="arch-arr">→</div>
+        <div class="arch-box"><strong>Three.js</strong>Visualización 3D</div>
+        <div class="arch-arr">→</div>
+        <div class="arch-box"><strong>SSE</strong>Tiempo Real</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;font-size:10px;color:var(--grey);margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      Sistema de Gestión Hídrica Inteligente · Python 3.12 · Flask · Pandas · NumPy · Three.js · WebGL
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  ESTADO GLOBAL
+// ═══════════════════════════════════════════════════════
+let state = {
+  zonas: [], alertas: [], eventos: [],
+  riego_manual: false, modo_auto: false,
+  avg_humedad: 0, estado_global: 'NORMAL', agua_ahorrada: 0
+};
+let zonaSeleccionada = null;
+let alertasVisibles  = [];
+let vista = '3d';
+
+// ═══════════════════════════════════════════════════════
+//  RELOJ
+// ═══════════════════════════════════════════════════════
+function tickReloj() {
+  const n = new Date();
+  document.getElementById('reloj').textContent =
+    n.toLocaleDateString('es-PE') + ' · ' + n.toLocaleTimeString('es-PE');
+}
+setInterval(tickReloj, 1000); tickReloj();
+
+// ═══════════════════════════════════════════════════════
+//  SSE — TIEMPO REAL DESDE FLASK
+// ═══════════════════════════════════════════════════════
+const sseStatus = document.getElementById('sse-status');
+let sse = new EventSource('/stream');
+sse.onopen    = () => { sseStatus.textContent='Conectado ✓'; sseStatus.style.color='var(--green)'; };
+sse.onerror   = () => { sseStatus.textContent='Reconectando…'; sseStatus.style.color='var(--orange)'; };
+sse.onmessage = e => {
+  const d = JSON.parse(e.data);
+  state = { ...state, ...d };
+  aplicarEstado();
+};
+
+// ═══════════════════════════════════════════════════════
+//  APLICAR ESTADO A LA UI
+// ═══════════════════════════════════════════════════════
+function aplicarEstado() {
+  // Status bar
+  const colMap = { NORMAL:'var(--green)', ALERTA:'var(--orange)', 'CRÍTICO':'var(--red)' };
+  const col = colMap[state.estado_global] || 'var(--green)';
+  document.getElementById('sb-estado').textContent = state.estado_global;
+  document.getElementById('sb-estado').style.color = col;
+  document.getElementById('sb-dot-global').style.background = col;
+  document.getElementById('sb-hum').textContent = state.avg_humedad.toFixed(1) + '%';
+  document.getElementById('sb-modo').textContent = state.modo_auto ? 'AUTOMÁTICO' : 'MANUAL';
+  document.getElementById('sb-modo').style.color = state.modo_auto ? 'var(--purple)' : 'var(--teal)';
+  const riega = state.riego_manual || (state.alertas && state.alertas.some(a=>a.tipo==='auto'));
+  document.getElementById('sb-riego').textContent = state.riego_manual ? 'ACTIVO' : (state.modo_auto ? 'AUTO' : 'DETENIDO');
+  document.getElementById('sb-riego').style.color = state.riego_manual ? 'var(--cyan)' : 'var(--grey)';
+  document.getElementById('sb-dot-riego').style.background = state.riego_manual ? 'var(--cyan)' : 'var(--grey)';
+  document.getElementById('sb-alerts').textContent = (state.alertas||[]).length;
+  document.getElementById('agua-ahorrada').textContent = state.agua_ahorrada.toFixed(1) + ' L';
+  if (state.sync_count !== undefined) document.getElementById('sync-count').textContent = state.sync_count;
+
+  // Auto badge
+  document.getElementById('auto-badge').classList.toggle('on', state.modo_auto);
+
+  // Botones
+  const btnR = document.getElementById('btn-riego');
+  btnR.textContent = state.riego_manual ? '⛔ Detener Riego Manual' : '💧 Activar Riego Manual';
+  btnR.className   = 'act-btn ' + (state.riego_manual ? 'btn-red' : 'btn-green');
+  const btnA = document.getElementById('btn-auto');
+  btnA.textContent = state.modo_auto ? '⏹ Desactivar Modo Auto' : '🔄 Activar Modo Automático';
+  btnA.className   = 'act-btn ' + (state.modo_auto ? 'btn-off' : 'btn-purple');
+
+  // Zona cards
+  renderZoneCards();
+
+  // Zona seleccionada
+  if (zonaSeleccionada !== null) renderZoneDetail(zonaSeleccionada);
+
+  // Alertas
+  procesarAlertas(state.alertas || []);
+
+  // Eventos
+  renderEventos(state.eventos || []);
+
+  // 3D zonas
+  actualizarColor3D();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ZONE CARDS (panel izq)
+// ═══════════════════════════════════════════════════════
+function colorEstado(e) {
+  return { Crítico:'var(--red)', Bajo:'var(--orange)', Óptimo:'var(--green)', Alto:'var(--cyan)' }[e] || 'var(--teal)';
+}
+function hexEstado(e) {
+  return { Crítico:'#f44336', Bajo:'#ff9800', Óptimo:'#00e676', Alto:'#00c8ff' }[e] || '#7ecec4';
+}
+
+function renderZoneCards() {
+  const c = document.getElementById('zone-cards');
+  c.innerHTML = '';
+  (state.zonas || []).forEach(z => {
+    const sel = zonaSeleccionada === z.id;
+    const col = colorEstado(z.estado);
+    const div = document.createElement('div');
+    div.className = 'zone-card' + (sel ? ' selected' : '');
+    div.onclick = () => seleccionarZona(z.id);
+    div.innerHTML = `
+      <div class="zc-head">
+        <span class="zc-name">${z.nombre}</span>
+        <span class="zc-estado" style="color:${col}">${z.estado}</span>
+      </div>
+      <div class="zc-crop">🌱 ${z.cultivo}</div>
+      <div class="zc-metrics">
+        <span style="color:var(--cyan)">💧${z.humedad}%</span>
+        <span style="color:var(--orange)">🌡${z.temperatura}°C</span>
+        <span style="color:${z.valvula?'var(--green)':'var(--grey)'}">⚡${z.valvula?'Abierta':'Cerrada'}</span>
+      </div>
+      <div class="bar-wrap"><div class="bar-fill" style="width:${z.humedad}%;background:${col}"></div></div>`;
+    c.appendChild(div);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  ZONE DETAIL (panel der)
+// ═══════════════════════════════════════════════════════
+function seleccionarZona(id) {
+  zonaSeleccionada = id;
+  renderZoneCards();
+  renderZoneDetail(id);
+  cargarPronostico(id);
+  if (vista === 'reports') cargarAnomalias(id);
+}
+
+function renderZoneDetail(id) {
+  const z = (state.zonas || []).find(z => z.id === id);
+  if (!z) return;
+  const col = colorEstado(z.estado);
+  document.getElementById('zone-detail').innerHTML = `
+    <div class="detail-card">
+      <div class="dc-title">${z.nombre} · ${z.cultivo}</div>
+      <div class="gauge-row">
+        <div class="gauge"><div class="gauge-val" style="color:var(--cyan)">${z.humedad}%</div><div class="gauge-lbl">Humedad</div></div>
+        <div class="gauge"><div class="gauge-val" style="color:var(--orange)">${z.temperatura}°C</div><div class="gauge-lbl">Temperatura</div></div>
+        <div class="gauge"><div class="gauge-val" style="color:${col}">${z.estado}</div><div class="gauge-lbl">Estado</div></div>
+      </div>
+    </div>
+    <div class="detail-card">
+      <div class="dc-title">Sensores ESP32</div>
+      <div class="metric-row"><span class="metric-lbl">Sensor humedad</span><span class="metric-val" style="color:var(--green)">✓ Online</span></div>
+      <div class="metric-row"><span class="metric-lbl">Sensor temperatura</span><span class="metric-val" style="color:var(--green)">✓ Online</span></div>
+      <div class="metric-row"><span class="metric-lbl">Electroválvula</span><span class="metric-val" style="color:${z.valvula?'var(--green)':'var(--grey)'}">${z.valvula?'Abierta':'Cerrada'}</span></div>
+      <div class="metric-row"><span class="metric-lbl">Señal WiFi</span><span class="metric-val" style="color:var(--cyan)">-52 dBm</span></div>
+    </div>
+    <div class="detail-card">
+      <div class="dc-title">Ajustar Humedad</div>
+      <div class="sl-row"><span>Humedad actual</span><span class="sl-val" id="zh-val">${z.humedad}%</span></div>
+      <input type="range" min="0" max="100" value="${z.humedad}"
+        oninput="document.getElementById('zh-val').textContent=this.value+'%'"
+        onchange="accion('ajustar_humedad',{zona_id:${id},valor:parseInt(this.value)})">
+    </div>`;
+}
+
+async function cargarPronostico(id) {
+  const res  = await fetch(`/api/pronostico/${id}`);
+  const data = await res.json();
+  const cont = document.getElementById('ml-pred');
+  cont.innerHTML = '';
+  data.forEach(p => {
+    const col = p.valor > 60 ? 'var(--cyan)' : p.valor > 40 ? 'var(--orange)' : 'var(--red)';
+    cont.innerHTML += `
+      <div class="pred-row">
+        <span class="pred-h">+${p.horas}h</span>
+        <div class="pred-track"><div class="pred-bar" style="width:${p.valor}%;background:${col}"></div></div>
+        <span class="pred-pct">${p.valor}%</span>
+      </div>`;
+  });
+  const warn = data.some(p => p.valor < 35);
+  if (warn) cont.innerHTML += `<div style="font-size:9px;color:var(--orange);margin-top:6px">⚠ Estrés hídrico proyectado</div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  ALERTAS VISUALES
+// ═══════════════════════════════════════════════════════
+const coloresAlerta = {
+  critical:'#f44336', warning:'#ff9800', ok:'#00e676', info:'#00c8ff', auto:'#9c6fff'
+};
+const clasesAlerta = {
+  critical:'alert-critical', warning:'alert-warning', ok:'alert-ok', info:'alert-info', auto:'alert-auto'
+};
+
+function procesarAlertas(nuevas) {
+  const banner = document.getElementById('alert-banner');
+  // Limpiar alertas expiradas del DOM
+  [...banner.children].forEach(c => {
+    const prog = parseFloat(c.dataset.progreso || 1);
+    if (prog <= 0) c.remove();
+  });
+  // Evitar duplicar por titulo
+  const existentes = new Set([...banner.children].map(c => c.dataset.titulo));
+  nuevas.forEach(a => {
+    if (existentes.has(a.titulo)) {
+      // actualizar progreso
+      const card = [...banner.children].find(c => c.dataset.titulo === a.titulo);
+      if (card) {
+        card.dataset.progreso = a.progreso;
+        const pb = card.querySelector('.alert-prog');
+        if (pb) pb.style.width = (a.progreso * 100) + '%';
+      }
+      return;
+    }
+    const col = coloresAlerta[a.tipo] || '#00c8ff';
+    const card = document.createElement('div');
+    card.className = `alert-card ${clasesAlerta[a.tipo] || 'alert-info'}`;
+    card.dataset.titulo = a.titulo;
+    card.dataset.progreso = a.progreso;
+    card.innerHTML = `
+      <div class="alert-icon">${a.icono}</div>
+      <div class="alert-body">
+        <div class="alert-title" style="color:${col}">${a.titulo}</div>
+        <div class="alert-msg">${a.mensaje}</div>
+        <div class="alert-prog" style="background:${col};width:${a.progreso*100}%"></div>
+      </div>
+      <button class="alert-close" onclick="this.closest('.alert-card').remove()">✕</button>`;
+    banner.appendChild(card);
+  });
+  document.getElementById('sb-alerts').textContent = banner.children.length;
+}
+
+// ═══════════════════════════════════════════════════════
+//  EVENTOS LOG
+// ═══════════════════════════════════════════════════════
+function renderEventos(evs) {
+  const c = document.getElementById('event-log');
+  c.innerHTML = evs.slice(0,8).map(([h,t]) =>
+    `<div class="tl-item"><div class="tl-time">${h}</div><div class="tl-text">${t}</div></div>`
+  ).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACCIÓN → API Flask
+// ═══════════════════════════════════════════════════════
+async function accion(tipo, extra = {}) {
+  const res  = await fetch('/api/accion', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ accion: tipo, ...extra })
+  });
+  const data = await res.json();
+  state.riego_manual = data.riego_manual;
+  state.modo_auto    = data.modo_auto;
+}
+
+// ═══════════════════════════════════════════════════════
+//  VISTA: 3D / REPORTES
+// ═══════════════════════════════════════════════════════
+function setVista(v) {
+  vista = v;
+  document.getElementById('reports-panel').classList.toggle('open', v==='reports');
+  document.getElementById('btn-3d').classList.toggle('active', v==='3d');
+  document.getElementById('btn-reports').classList.toggle('active', v==='reports');
+  if (v === 'reports') cargarReportes();
+}
+
+async function cargarReportes() {
+  // Estadísticas
+  const res   = await fetch('/api/estadisticas');
+  const stats = await res.json();
+  const tbody = document.getElementById('stats-tbody');
+  tbody.innerHTML = stats.map(r => {
+    const col = r.pct_tiempo_critico > 30 ? '#f44336' : r.pct_tiempo_critico > 10 ? '#ff9800' : '#00e676';
+    return `<tr>
+      <td style="font-weight:600">${r.zona}</td>
+      <td><div class="tbar-wrap"><div class="tbar"><div class="tbar-fill" style="width:${r.humedad_media}%;background:var(--cyan)"></div></div>${r.humedad_media}%</div></td>
+      <td style="color:var(--teal)">${r.humedad_std}</td>
+      <td style="color:var(--orange)">${r.humedad_min}%</td>
+      <td style="color:var(--green)">${r.humedad_max}%</td>
+      <td style="color:var(--orange)">${r.temp_media}°C</td>
+      <td style="color:${col}">${r.pct_tiempo_critico}%</td>
+      <td><div class="tbar-wrap"><div class="tbar"><div class="tbar-fill" style="width:${r.humedad_media}%;background:${col}"></div></div></div></td>
+    </tr>`;
+  }).join('');
+
+  // Precisión ML
+  const pres = await fetch('/api/precision');
+  const pd   = await pres.json();
+  const kp   = document.getElementById('kpi-prec');
+  if (kp) kp.textContent = pd.precision + '%';
+
+  // Anomalías
+  const zidA = zonaSeleccionada !== null ? zonaSeleccionada : 0;
+  cargarAnomalias(zidA);
+}
+
+async function cargarAnomalias(zid) {
+  const res  = await fetch(`/api/anomalias/${zid}`);
+  const data = await res.json();
+  const cont = document.getElementById('anom-container');
+  if (!cont) return;
+  if (data.length === 0) {
+    cont.innerHTML = '<div style="color:var(--grey)">Sin anomalías detectadas en esta zona.</div>';
+    return;
+  }
+  cont.innerHTML = data.map(a =>
+    `<div class="anom-row">
+      <span class="anom-time">${a.datetime}</span>
+      <span class="anom-val">💧 ${a.humedad}%</span>
+      <span class="anom-z">z=${a.z_score}</span>
+    </div>`
+  ).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  THREE.JS — CAMPO 3D
+// ═══════════════════════════════════════════════════════
+const wrap    = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.setClearColor(0x050d1a);
+wrap.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+scene.fog    = new THREE.FogExp2(0x050d1a, 0.016);
+
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
+camera.position.set(28, 22, 28);
+camera.lookAt(0, 0, 0);
+
+// Luces
+scene.add(new THREE.AmbientLight(0x0d2137, 0.9));
+const sol = new THREE.DirectionalLight(0x9ec8ff, 1.2);
+sol.position.set(20, 30, 10); sol.castShadow = true;
+scene.add(sol);
+const luzRelleno = new THREE.DirectionalLight(0x004d40, 0.4);
+luzRelleno.position.set(-10, 10, -10);
+scene.add(luzRelleno);
+
+// Suelo
+const suelo = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60, 10, 10),
+  new THREE.MeshLambertMaterial({ color: 0x0d1a0d })
+);
+suelo.rotation.x = -Math.PI / 2; suelo.receiveShadow = true; scene.add(suelo);
+
+// Grid
+const gridHelper = new THREE.GridHelper(60, 30, 0x00c8ff, 0x00c8ff);
+// En r128+ GridHelper puede generar material array — aplicamos a ambos
+const gridMats = Array.isArray(gridHelper.material) ? gridHelper.material : [gridHelper.material];
+gridMats.forEach(m => { m.opacity = 0.06; m.transparent = true; });
+gridHelper.position.y = 0.01;
+scene.add(gridHelper);
+
+// Datos de zonas
+const ZONAS_CFG = [
+  { id:0, pos:[-8,-8], tam:[10,9] },
+  { id:1, pos:[8,-8],  tam:[10,9] },
+  { id:2, pos:[8,8],   tam:[10,9] },
+  { id:3, pos:[-8,8],  tam:[10,9] },
+];
+
+const zonaMeshes   = [];
+const zoneBorders  = [];
+const sensorLights = [];
+const sensorSpheres= [];
+
+ZONAS_CFG.forEach((cfg, i) => {
+  // Placa de zona
+  const geo = new THREE.BoxGeometry(cfg.tam[0], 0.3, cfg.tam[1]);
+  const mat = new THREE.MeshLambertMaterial({ color: 0x00c8ff, transparent: true, opacity: 0.35 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(cfg.pos[0], 0.15, cfg.pos[1]);
+  mesh.receiveShadow = true;
+  mesh.userData = { zoneId: i };
+  scene.add(mesh); zonaMeshes.push(mesh);
+
+  // Borde
+  const edgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(cfg.tam[0]+.2,.4,cfg.tam[1]+.2));
+  const edges = new THREE.LineSegments(edgesGeo, new THREE.LineBasicMaterial({ color: 0x00c8ff, transparent:true, opacity:.5 }));
+  edges.position.copy(mesh.position); scene.add(edges); zoneBorders.push(edges);
+
+  // Cultivos
+  for (let cx=-3; cx<=3; cx+=2) for (let cz=-3; cz<=3; cz+=2) {
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(.06,.2,.6+Math.random()*.4,6),
+      new THREE.MeshLambertMaterial({ color: new THREE.Color(.15,.4+Math.random()*.2,.15) })
+    );
+    m.position.set(cfg.pos[0]+cx*.9, .5, cfg.pos[1]+cz*.9);
+    m.castShadow = true; scene.add(m);
+  }
+
+  // Poste ESP32
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,1.5,8), new THREE.MeshLambertMaterial({color:0x8a9ba8}));
+  pole.position.set(cfg.pos[0]-3.5, .75, cfg.pos[1]-3.5); scene.add(pole);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(.3,.3,.3), new THREE.MeshLambertMaterial({color:0x1a2535}));
+  box.position.set(cfg.pos[0]-3.5, 1.65, cfg.pos[1]-3.5); scene.add(box);
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(.1,8,8), new THREE.MeshLambertMaterial({color:0x00c8ff, emissive:0x004060}));
+  sphere.position.set(cfg.pos[0]-3.5, 2.05, cfg.pos[1]-3.5); scene.add(sphere); sensorSpheres.push(sphere);
+  const sl = new THREE.PointLight(0x00c8ff, 1.5, 4);
+  sl.position.copy(sphere.position); scene.add(sl); sensorLights.push(sl);
+});
+
+// Estación central
+const estacion = new THREE.Mesh(new THREE.BoxGeometry(4,3,3), new THREE.MeshLambertMaterial({color:0x1a2535}));
+estacion.position.set(0,1.5,0); estacion.castShadow=true; scene.add(estacion);
+const pantalla = new THREE.Mesh(new THREE.BoxGeometry(.8,2,.06), new THREE.MeshLambertMaterial({color:0x0066bb, emissive:0x001a44}));
+pantalla.position.set(0,1.2,1.52); scene.add(pantalla);
+const antena = new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,1.2,8), new THREE.MeshLambertMaterial({color:0x8a9ba8}));
+antena.position.set(0,3.5,0); scene.add(antena);
+const antLight = new THREE.PointLight(0x00c8ff, 1, 6);
+antLight.position.set(0,2,2); scene.add(antLight);
+
+// Tuberías
+ZONAS_CFG.forEach(cfg => {
+  const dist = Math.hypot(cfg.pos[0], cfg.pos[1]) - 2;
+  const ang  = Math.atan2(cfg.pos[0], cfg.pos[1]);
+  const tube = new THREE.Mesh(
+    new THREE.CylinderGeometry(.08,.08,dist,8),
+    new THREE.MeshLambertMaterial({color:0x3a5060})
+  );
+  tube.position.set(cfg.pos[0]*.5, .08, cfg.pos[1]*.5);
+  tube.rotation.z = Math.PI/2; tube.rotation.y = -ang;
+  scene.add(tube);
+});
+
+// Gotas de agua
+const gotas = [];
+function spawnGota(zid) {
+  const cfg = ZONAS_CFG[zid];
+  const geo = new THREE.SphereGeometry(.1,5,5);
+  const mat = new THREE.MeshLambertMaterial({ color:0x29b6f6, transparent:true, opacity:.8 });
+  const m   = new THREE.Mesh(geo, mat);
+  m.position.set(cfg.pos[0]+Math.random()*8-4, 3+Math.random()*2, cfg.pos[1]+Math.random()*7-3.5);
+  m.userData.vy = 0; m.userData.life = 0;
+  scene.add(m); gotas.push(m);
+}
+
+// Actualizar colores de zonas según humedad
+function actualizarColor3D() {
+  (state.zonas||[]).forEach((z,i) => {
+    const col = new THREE.Color(hexEstado(z.estado));
+    if (zonaMeshes[i]) {
+      zonaMeshes[i].material.color.copy(col);
+      zonaMeshes[i].material.opacity = zonaSeleccionada===i ? .65 : .35;
+      zonaBorders[i].material.color.copy(col);
+      zonaBorders[i].material.opacity = zonaSeleccionada===i ? 1 : .4;
+    }
+    if (sensorLights[i])  sensorLights[i].color.copy(col);
+    if (sensorSpheres[i]) sensorSpheres[i].material.color.copy(col);
+  });
+}
+
+// Cámara orbital
+let theta = Math.PI/4, phi = Math.PI/4.5, radius = 42;
+let dragging = false, lastMouse = {x:0,y:0};
+
+renderer.domElement.addEventListener('mousedown', e => {
+  if (e.button !== 0) return; dragging=true; lastMouse={x:e.clientX,y:e.clientY};
+});
+window.addEventListener('mouseup', () => dragging=false);
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  theta -= (e.clientX-lastMouse.x)*0.005;
+  phi = Math.max(.15, Math.min(1.4, phi-(e.clientY-lastMouse.y)*0.005));
+  lastMouse = {x:e.clientX,y:e.clientY};
+  updateCamera();
+});
+renderer.domElement.addEventListener('wheel', e => {
+  radius = Math.max(15, Math.min(70, radius+e.deltaY*.05));
+  updateCamera();
+}, {passive:true});
+function updateCamera() {
+  camera.position.set(
+    radius*Math.sin(phi)*Math.sin(theta),
+    radius*Math.cos(phi),
+    radius*Math.sin(phi)*Math.cos(theta)
+  );
+  camera.lookAt(0,0,0);
+}
+updateCamera();
+
+// Raycasting (click zona)
+const raycaster = new THREE.Raycaster();
+const mouse2 = new THREE.Vector2();
+renderer.domElement.addEventListener('click', e => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse2.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouse2.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse2, camera);
+  const hits = raycaster.intersectObjects(zonaMeshes);
+  if (hits.length>0) seleccionarZona(hits[0].object.userData.zoneId);
+});
+
+// Tooltip hover
+const tooltip = document.getElementById('tooltip');
+renderer.domElement.addEventListener('mousemove', e => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse2.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouse2.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse2, camera);
+  const hits = raycaster.intersectObjects(zonaMeshes);
+  if (hits.length>0) {
+    const z = state.zonas?.[hits[0].object.userData.zoneId];
+    if (z) {
+      tooltip.style.display='block';
+      tooltip.style.left=(e.clientX+14)+'px';
+      tooltip.style.top=(e.clientY-20)+'px';
+      tooltip.innerHTML=`<b>${z.nombre}</b><br>💧 ${z.humedad}% · 🌡 ${z.temperatura}°C<br>Estado: <span style="color:${colorEstado(z.estado)}">${z.estado}</span>`;
+    }
+  } else { tooltip.style.display='none'; }
+});
+
+// Resize
+function onResize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(onResize).observe(wrap);
+onResize();
+
+// Loop de animación
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // Luces de sensores pulsantes
+  sensorLights.forEach((sl,i) => sl.intensity = 1+Math.sin(t*2+i)*.6);
+
+  // Animación antena
+  antena.rotation.y = t*.8;
+  antLight.intensity = .8+Math.sin(t*3)*.2;
+
+  // Flotación sutil de zonas
+  zonaMeshes.forEach((m,i) => m.position.y = .15+Math.sin(t*.5+i)*.02);
+
+  // Partículas de agua
+  for (let i=gotas.length-1; i>=0; i--) {
+    const g = gotas[i];
+    g.userData.vy -= .012; g.position.y += g.userData.vy; g.userData.life++;
+    if (g.position.y < .1 || g.userData.life > 85) { scene.remove(g); gotas.splice(i,1); }
+  }
+
+  // Spawn de gotas si hay riego
+  (state.zonas||[]).forEach((z,i) => {
+    const activa = state.riego_manual || z.valvula;
+    if (activa && Math.random() < .4) spawnGota(i);
+  });
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// Carga inicial
+fetch('/api/estado')
+  .then(r => r.json())
+  .then(d => { state = {...state, ...d}; aplicarEstado(); })
+  .catch(err => console.warn('[Hídrica] /api/estado no disponible al arrancar:', err));
+</script>
+</body>
+</html>
